@@ -15,17 +15,17 @@ logger = logging.getLogger("spider")
 
 def handler_logger(level, logfile, screen=True):
     level_map = {
-        1: logging.FATAL,
-        2: logging.ERROR,
-        3: logging.WARN,
-        4: logging.DEBUG,
-        5: logging.INFO
+        1: "%(message)s",
+        2: "%(asctime)s - %(message)s",
+        3: "%(asctime)s - %(name)s - %(message)s",
+        4: "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        5: "%(asctime)s - %(name)s:%(lineno)s - %(levelname)s - %(message)s"
     }
     fhandler = logging.FileHandler(logfile)
-    logger.setLevel(level_map[level])
-    fhandler.setLevel(level_map[level])
+    logger.setLevel(logging.INFO)
+    fhandler.setLevel(logging.INFO)
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level_map[level]
     )
     fhandler.setFormatter(formatter)
     logger.addHandler(fhandler)
@@ -47,14 +47,18 @@ class Spider(object):
         self.keyword = keyword
         self.degree = degree
 
-    def run(self):
+    def run(self, urls):
         logger.info("start run spider process")
         self.thread_pool = ThreadPool(self.thread_num)
-
-    def add_url(self, urls):
         for url in urls:
             logger.info("add url %s to queue" % url)
             self.thread_pool.add_job(url, self.keyword, self.degree)
+        while self.thread_pool.check_job() > 0:
+            try:
+                logger.info("%d job is working" % self.thread_pool.check_job())
+                time.sleep(5)
+            except KeyboardInterrupt:
+                self.thread_pool.stop_job()
 
     def quit(self):
         logger.warn("quit all thread")
@@ -104,7 +108,6 @@ def scraping(argv):
     debug_level = 0
     if options.debug_level in range(1, 6):
         debug_level = options.debug_level
-        print debug_level
     # 解析日志文件, 如果存在, 追加写, 如果不存在, 直接写
     logfile = ""
     if os.path.exists(options.logfile):
@@ -132,18 +135,19 @@ def scraping(argv):
         thread_num = options.thread_num
 
     spider = Spider(thread_num, logfile, debug_level, dbfile, keyword, degree)
-    spider.run()
 
     # 解析url, 可以使用逗号分割多个url
     urls = []
     if options.url:
         for u in options.url.split(","):
             if u.startswith("http"):
-                urls.append(u.replace("", ""))
+                urls.append(u)
             else:
                 logger.error("%s is illegal url" % u)
-
-    spider.add_url(urls)
+    if not urls:
+        logger.error("no url to scraping, exit")
+        return 
+    spider.run(urls)
 
 if __name__ == "__main__":
     scraping(sys.argv[1:])
