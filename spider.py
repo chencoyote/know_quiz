@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 '''
 __auth__ = coyote
+
+主要入口功能函数, 解析选项, 启动任务
 '''
 
 from optparse import OptionParser
@@ -49,10 +51,13 @@ class Spider(object):
 
     def run(self, urls):
         logger.info("start run spider process")
-        self.thread_pool = ThreadPool(self.thread_num)
+        self.thread_pool = ThreadPool(self.dbfile, self.thread_num)
         for url in urls:
-            logger.info("add url %s to queue" % url)
-            self.thread_pool.add_job(url, self.keyword, self.degree)
+            # import spider template
+            from modules import get_my_blog
+            logger.info("add job %s to queue" % get_my_blog.__name__)
+            args = (url, self.keyword, self.degree)
+            self.thread_pool.add_job(get_my_blog, args)
         while self.thread_pool.check_job() > 0:
             try:
                 logger.info("%d job is working" % self.thread_pool.check_job())
@@ -134,6 +139,7 @@ def scraping(argv):
     if isinstance(options.thread_num, int):
         thread_num = options.thread_num
 
+    # 实例化主要功能类
     spider = Spider(thread_num, logfile, debug_level, dbfile, keyword, degree)
 
     # 解析url, 可以使用逗号分割多个url
@@ -146,7 +152,7 @@ def scraping(argv):
                 logger.error("%s is illegal url" % u)
     if not urls:
         logger.error("no url to scraping, exit")
-        return 
+        return
     spider.run(urls)
 
 if __name__ == "__main__":
