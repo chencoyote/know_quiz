@@ -82,11 +82,11 @@ def scraping(argv):
     )
     parser.add_option(
         "-d", "--degree", dest="degree", default="simple",
-        help="deep or simple"
+        help="deep or simple, default is simple"
     )
     parser.add_option(
         "-f", "--logfile", dest="logfile", default="/var/log/spider.log",
-        help="write logging to file", metavar="FILE"
+        help="write logging to file, default: /var/log/spider.log", metavar="FILE"
     )
     parser.add_option(
         "-k", "--keyword", dest="keyword", type="str", default="",
@@ -94,15 +94,15 @@ def scraping(argv):
     )
     parser.add_option(
         "-b", "--dbfile", dest="dbfile", default="/tmp/spider.db",
-        help="write data to file", metavar="FILE"
+        help="write data to file, default: /tmp/spider.db", metavar="FILE"
     )
     parser.add_option(
         "-l", "--debug_level", dest="debug_level", type="int", default=1,
-        help="debug level to write"
+        help="debug level to write range 1 to 5, default: 1"
     )
     parser.add_option(
         "-t", "--thread_num", dest="thread_num", type="int", default=10,
-        help="debug level to write"
+        help="debug level to write, default is 10"
     )
 
     if len(argv) < 1:
