@@ -6,16 +6,17 @@ import threading
 import time
 import logging
 from Queue import Queue
-from data import SpiderData
+from knowquiz.data import SpiderData
 
 logger = logging.getLogger("spider")
 
 
 class SpiderWorker(threading.Thread):
 
-    def __init__(self, tid, work_q, event):
+    def __init__(self, tid, work_q, res_q, event):
         threading.Thread.__init__(self)
         self.work_queue = work_q
+        self.result_queue = res_q
         self.timeout = 10
         self.event = event
         self.tid = tid
@@ -23,26 +24,20 @@ class SpiderWorker(threading.Thread):
         pass
 
     def run(self):
-        logger.info("thread number %s is start" % self.tid)
+        logger.info("线程%d 运行" % self.tid)
         while not self.event.isSet():
             if not self.work_queue.empty():
                 callable, args = self.work_queue.get(self.timeout)
-                logger.info("start scraping use %s" % callable.__name__)
+                logger.info("开始抓取网页内容, url %s 使用 %s" % (args[0], callable.__name__))
                 result = callable(*args)
-                print result
                 if result["deep_url"]:
                     for url in result["deep_url"]:
                         self.work_queue.put(
                             (callable, (url, result["keyword"], "simple"))
                         )
-                        self.sd.add(
-                            result["url"], result["keyword"], result["html"]
-                        )
+                        self.result_queue.put(result)
                 else:
-                    self.sd.add(
-                        result["url"], result["keyword"], result["html"]
-                    )
-                self.sd.close_all()
+                    self.result_queue.put(result)
             else:
                 time.sleep(1)
         logger.warn("线程已停止")
@@ -73,27 +68,51 @@ class SpiderWorker(threading.Thread):
     #         pass
 
 
-class ThreadPool:
+class DatabaseWorker(threading.Thread):
+
+    def __init__(self, dbfile, res_q, event):
+        threading.Thread.__init__(self)
+        self.res_q = res_q
+        self.event = event
+        self.dbfile = dbfile
+        self.timeout = 10
+        self.setDaemon(True)
+
+    def run(self):
+        while not self.event.isSet():
+            if not self.res_q.empty():
+                sd = SpiderData(self.dbfile)
+                data = self.res_q.get(self.timeout)
+                logger.info("收到数据进行存储到库, url: %s" % data["url"])
+                sd.add_data(data)
+                sd.close()
+            else:
+                time.sleep(0.5)
+
+
+class ThreadPool(object):
 
     def __init__(self, dbfile, max_pool=10):
         self.work_queue = Queue()
         self.res_queue = Queue()
         self.max_pool = max_pool
+        self.dbfile = dbfile
         self.event = threading.Event()
         self.pool = []
-        self.sd = SpiderData()
-        self.sd.dbfile = dbfile
         self._recruit_threads()
 
     def _recruit_threads(self):
         for i in range(self.max_pool):
-            logger.info("thread number %d is create" % i)
+            logger.info("线程%d 创建" % i)
             aw = SpiderWorker(
-                i, self.work_queue, self.res_queue, self.event, self.sd
+                i, self.work_queue, self.res_queue, self.event
             )
             # TODO -- 数据库只能由一个线程操作, 单独创建一个线程进行存储数据
             aw.start()
             self.pool.append(aw)
+        dw = DatabaseWorker(self.dbfile, self.res_queue, self.event)
+        dw.start()
+        self.pool.append(dw)
         self.event.clear()
         while True:
             try:
